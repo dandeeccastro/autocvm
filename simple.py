@@ -26,15 +26,7 @@ dictionary = {
     "sumario das decisoes":"SUM"
 }
 
-options = Options()
-options.add_experimental_option("prefs", {
-  "download.default_directory": "/home/dandee/Documents/Projetos/DoutoradoAutomatizacao/out",
-  "download.prompt_for_download": False,
-  "download.directory_upgrade": True,
-  "safebrowsing.enabled": True
-})
-
-chromium = webdriver.Chrome(options=options)
+chromium = webdriver.Chrome()
 wait = WebDriverWait(chromium,50)
 
 validTypes = ["AGO","AGO/E","AGE"]
@@ -71,6 +63,7 @@ def TableRowDataToFileName(companyCode,docType,specimenCode,date,status,version,
     finalIterable = (companyCode,docType,specimenCode,date,status,version,category)
 
     return '_'.join(finalIterable)
+
 def queryCVM():
 
     # Parte onde temos o formulario para a empresa escolhida
@@ -157,13 +150,9 @@ def GetValidDocs(resultRows):
                 if ("Ativo" in rowData[7].text ):
                     oki += 1
                     filename = TableRowDataToFileName(rowData[0].text,rowData[3].text,rowData[4].text,rowData[6].text,rowData[7].text,rowData[8].text,rowData[9].text)
-                    downloadedFiles.append(filename)
                     fileLink = row.find_element_by_class_name('fi-download')
-                    fileLink.click()
-            else:
-                notOki += 1
-        else:
-            notOki += 1
+                    print (filename)
+                    print(fileLink.get_attribute('onclick'))
 
 def DownloadDocumentsByCompanyName(companyID):
     fillCompanyName(companyID)
@@ -174,35 +163,9 @@ def DownloadDocumentsByCompanyName(companyID):
     DownloadFilesFromResultTable()
     return 1
 
-def fileLen(fname):
-    with open(fname) as f:
-        for i, l in enumerate(f):
-            pass
-    return i + 1
-
-def ChangeDownloadFileName():
-    files = filter(os.path.isfile, os.listdir())
-    files = [os.path.join('./', f) for f in files] # add path to each file
-    files.sort(key=lambda x: os.path.getmtime(x))
-    i = 0
-    for file in files:
-        os.rename(file,downloadedFiles[i])
-        i+=1
-
-# def ChangeDownloadFileName(name):
-#     for arq in os.listdir():
-#         if (arq not in downloadedFiles and "Unconfirmed" not in arq):
-#             # Encontrei o arquivo que precisa ser mudado
-#             while not os.path.exists(arq):
-#                 time.sleep(1)
-# 
-#             if os.path.isfile(arq):
-#                 os.rename(arq,name)
-#                 break
-
 def main():
-    companyFile = open("updated.csv","r")
-    size = fileLen("./updated.csv")
+    companyFile = open("actual.csv","r")
+    size = fileLen("./actual.csv")
     os.chdir('./out')
     i = 0
     for company in companyFile:
@@ -213,6 +176,5 @@ def main():
             print("Resultados encontrados")
         else:
             print("Não foram encontrados resultados")
-    ChangeDownloadFileName()
 
 main()
