@@ -1,6 +1,7 @@
 import os
 import unidecode
 import time
+
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.keys import Keys
@@ -34,33 +35,33 @@ invalidSpecimens = ["manual para participacao","justificacao de incorporacao, fu
 
 downloadedFiles = []
 
-def TableRowDataToFileName(companyCode,docType,specimenCode,date,status,version,category):
+def TableRowDataToFileName(companyCode,documentType,specimenCode,date,status,version,category):
     companyCode = ''.join(companyCode.split('-'))
 
-    docType = ''.join(docType.split('/'))
+    documentType = ''.join(documentType.split('/'))
     try:
         specimenCode = dictionary[unidecode.unidecode(specimenCode.lower())]
     except KeyError:
         print ("|"+unidecode.unidecode(specimenCode.lower())+"|")
         specimenCode = "ERROR"
 
-    dateArr = date.split()
-    dateArr[0] = dateArr[0].split('/')[::-1]
+    dateArray = date.split()
+    dateArray[0] = dateArray[0].split('/')[::-1]
 
-    if (len(dateArr[0][0]) is 2):
-        dateArr[0][0] = "20" + dateArr[0][0]
-    if (len(dateArr[0][1]) is 1):
-        dateArr[0][1] = '0' + dateArr[0][1]
-    if (len(dateArr[0][2]) is 1):
-        dateArr[0][2] = '0' + dateArr[0][2]
+    if (len(dateArray[0][0]) is 2):
+        dateArray[0][0] = "20" + dateArray[0][0]
+    if (len(dateArray[0][1]) is 1):
+        dateArray[0][1] = '0' + dateArray[0][1]
+    if (len(dateArray[0][2]) is 1):
+        dateArray[0][2] = '0' + dateArray[0][2]
 
-    dateArr[0] = ''.join(dateArr[0])
-    dateArr[1] = ''.join(dateArr[1].split(':'))
-    date = ''.join(dateArr)
+    dateArray[0] = ''.join(dateArray[0])
+    dateArray[1] = ''.join(dateArray[1].split(':'))
+    date = ''.join(dateArray)
 
     status = status[0]
 
-    finalIterable = (companyCode,docType,specimenCode,date,status,version,category)
+    finalIterable = (companyCode,documentType,specimenCode,date,status,version,category)
 
     return '_'.join(finalIterable)
 
@@ -128,9 +129,9 @@ def findFirstValidCompany():
 def DownloadFilesFromResultTable():
     paginationText = chromium.find_element_by_id("grdDocumentos_info")
     text = paginationText.text.split()
-    numString = text[len(text) - 2]
-    num = int( int(numString) / 100 ) + 1
-    for i in range(0,num):
+    paginationNumberString = text[len(text) - 2]
+    paginationNumber = int( int(paginationNumberString) / 100 ) + 1
+    for i in range(0,paginationNumber):
         wait.until(EC.visibility_of_element_located((By.CLASS_NAME,"fi-download")))
         resultRows = chromium.find_elements_by_tag_name("tr")
         GetValidDocs(resultRows)
@@ -138,21 +139,28 @@ def DownloadFilesFromResultTable():
         if ("disabled" not in nextButton.get_attribute("class")):
             nextButton.click()
 
+def ValidateDocumentCriteria(informationRow):
+    typeValidation = informationRow[3].text in validTypes
+    specimenValidation = unidecode.unidecode(informationRow[4].text.lower()) not in invalidSpecimens
+    active = "Ativo" in informationRow[7].text
+
+    return (typeValidation and specimenValidation and active)
+
 def GetValidDocs(resultRows):
-    oki = 0
-    notOki = 0
+    validCount = 0
+    invalidCount = 0
     for row in resultRows:
         if (len(row.find_elements_by_tag_name("td")) < 10):
             continue
         rowData = row.find_elements_by_tag_name("td")
-        if (rowData[3].text in validTypes):
-            if (unidecode.unidecode(rowData[4].text.lower()) not in invalidSpecimens):
-                if ("Ativo" in rowData[7].text ):
-                    oki += 1
-                    filename = TableRowDataToFileName(rowData[0].text,rowData[3].text,rowData[4].text,rowData[6].text,rowData[7].text,rowData[8].text,rowData[9].text)
-                    fileLink = row.find_element_by_class_name('fi-download')
-                    print (filename)
-                    print(fileLink.get_attribute('onclick'))
+        if (ValidateDocumentCriteria(rowData):
+            validCount += 1
+            filename = TableRowDataToFileName(rowData[0].text,rowData[3].text,rowData[4].text,rowData[6].text,rowData[7].text,rowData[8].text,rowData[9].text)
+            fileLink = row.find_element_by_class_name('fi-download')
+            print (filename)
+            print(fileLink.get_attribute('onclick'))
+        else:
+            invalidCount += 1
 
 def DownloadDocumentsByCompanyName(companyID):
     fillCompanyName(companyID)
