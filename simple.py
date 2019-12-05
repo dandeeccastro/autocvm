@@ -1,4 +1,6 @@
 import os
+import requests
+import urllib3
 import unidecode
 import time
 
@@ -11,8 +13,10 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select
 from selenium.webdriver.chrome.options import Options
 
+apiURL = "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext"
 initialURL = "https://cvmweb.cvm.gov.br/SWB/Sistemas/SCW/CPublica/CiaAb/FormBuscaCiaAb.aspx?TipoConsult=c"
-
+validTypes = ["AGO","AGO/E","AGE"]
+invalidSpecimens = ["manual para participacao","justificacao de incorporacao, fusao ou cisao","protocolo de incorporacao, fusao ou cisao","protocolo e justificativa de incorporacao, fusao ou cisao","protocolo e justificacao de incorporacao, fusao ou cisao","edital de convocacao"]
 dictionary = {
     "ata": "ATA",
     "boletim de voto a distancia":"BVD",
@@ -27,13 +31,11 @@ dictionary = {
     "sumario das decisoes":"SUM"
 }
 
-chromium = webdriver.Chrome()
-wait = WebDriverWait(chromium,50)
-
-validTypes = ["AGO","AGO/E","AGE"]
-invalidSpecimens = ["manual para participacao","justificacao de incorporacao, fusao ou cisao","protocolo de incorporacao, fusao ou cisao","protocolo e justificativa de incorporacao, fusao ou cisao","protocolo e justificacao de incorporacao, fusao ou cisao","edital de convocacao"]
-
+firefox = webdriver.Firefox()
+wait = WebDriverWait(firefox,50)
 downloadedFiles = []
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def TableRowDataToFileName(companyCode,documentType,specimenCode,date,status,version,category):
     companyCode = ''.join(companyCode.split('-'))
@@ -72,40 +74,40 @@ def queryCVM():
     # wait.until(EC.presence_of_element_located((By.ID, "rdPeriodo")))
     wait.until(EC.invisibility_of_element_located((By.ID,"divSplash")))
 
-    periodRadio = chromium.find_element_by_id("rdPeriodo")
+    periodRadio = firefox.find_element_by_id("rdPeriodo")
     periodRadio.click()
 
     wait.until(EC.visibility_of_element_located((By.ID, "txtDataIni")))
 
-    txtDataIni = chromium.find_element_by_id("txtDataIni")
+    txtDataIni = firefox.find_element_by_id("txtDataIni")
     txtDataIni.send_keys("05/01/2017")
-    txtHoraIni = chromium.find_element_by_id("txtHoraIni")
+    txtHoraIni = firefox.find_element_by_id("txtHoraIni")
     txtHoraIni.send_keys("00:00")
 
-    cboCategoria = chromium.find_elements_by_tag_name("select")[0]
+    cboCategoria = firefox.find_elements_by_tag_name("select")[0]
     try:
         Select(cboCategoria).select_by_visible_text("Assembleia")
     except NoSuchElementException:
         return 0
 
     wait.until(EC.invisibility_of_element_located((By.ID,"divSplash")))
-    btnConsulta = chromium.find_element_by_id("btnConsulta")
+    btnConsulta = firefox.find_element_by_id("btnConsulta")
     btnConsulta.click()
     wait.until(EC.invisibility_of_element_located((By.ID,"divSplash")))
     return 1
 
 def fillCompanyName(companyID):
 
-    chromium.get(initialURL)
-    inputField = chromium.find_element_by_id("txtCNPJNome")
+    firefox.get(initialURL)
+    inputField = firefox.find_element_by_id("txtCNPJNome")
     inputField.send_keys(companyID)
-    # inputField.send_keys(Keys.ENTER)
+    inputField.send_keys(Keys.ENTER)
 
 def findFirstValidCompany():
     wait.until_not(EC.presence_of_element_located((By.ID,"txtCNPJNome")))
     try:
         if (EC.presence_of_element_located((By.ID, "lblMsg"))):
-            possibleError = chromium.find_element_by_id("lblMsg")
+            possibleError = firefox.find_element_by_id("lblMsg")
             if "Nenhuma companhia foi encontrada com o critério de busca especificado" in possibleError.text:
                 return 0
     except NoSuchElementException:
@@ -114,7 +116,7 @@ def findFirstValidCompany():
         print('Regular')
     wait.until(EC.presence_of_element_located((By.ID, "dlCiasCdCVM")))
     # Parte onde temos a tabela de empresas possíveis
-    tableRows = chromium.find_elements_by_tag_name("tr")
+    tableRows = firefox.find_elements_by_tag_name("tr")
     found = 0
     for row in tableRows:
         col = row.find_elements_by_tag_name("td")
@@ -127,15 +129,15 @@ def findFirstValidCompany():
     return 1
 
 def DownloadFilesFromResultTable():
-    paginationText = chromium.find_element_by_id("grdDocumentos_info")
+    paginationText = firefox.find_element_by_id("grdDocumentos_info")
     text = paginationText.text.split()
     paginationNumberString = text[len(text) - 2]
     paginationNumber = int( int(paginationNumberString) / 100 ) + 1
     for i in range(0,paginationNumber):
         wait.until(EC.visibility_of_element_located((By.CLASS_NAME,"fi-download")))
-        resultRows = chromium.find_elements_by_tag_name("tr")
+        resultRows = firefox.find_elements_by_tag_name("tr")
         GetValidDocs(resultRows)
-        nextButton = chromium.find_element_by_id("grdDocumentos_next")
+        nextButton = firefox.find_element_by_id("grdDocumentos_next")
         if ("disabled" not in nextButton.get_attribute("class")):
             nextButton.click()
 
@@ -153,15 +155,29 @@ def GetValidDocs(resultRows):
         if (len(row.find_elements_by_tag_name("td")) < 10):
             continue
         rowData = row.find_elements_by_tag_name("td")
-        if (ValidateDocumentCriteria(rowData):
+        if (ValidateDocumentCriteria(rowData)):
             validCount += 1
             filename = TableRowDataToFileName(rowData[0].text,rowData[3].text,rowData[4].text,rowData[6].text,rowData[7].text,rowData[8].text,rowData[9].text)
             fileLink = row.find_element_by_class_name('fi-download')
-            print (filename)
-            print(fileLink.get_attribute('onclick'))
+            fileData = fileLink.get_attribute('onclick').rstrip().split(',')
+            if (not DownloadFile(fileData[0],fileData[1],fileData[2],fileData[3],filename)):
+                print("Erro no download do arquivo " + filename)
+
         else:
             invalidCount += 1
 
+def DownloadFile(numSequencia, numVersao, numProtocolo, descTipo, endFileName):
+    url = apiURL + "&numSequencia=" + numSequencia + "&numVersao=" + numVersao + "&numProtocolo=" + numProtocolo + "&descTipo=" + descTipo + "&CodigoInstituicao=1"
+    try:
+        endFile = requests.get( url, allow_redirects=True, verify=False)
+    except requests.ConnectionError:
+        return 0
+    except ConnectionResetError:
+        return 0
+    file = open(endFileName,"wb")
+    file.write(endFile.content)
+    return 1
+    
 def DownloadDocumentsByCompanyName(companyID):
     fillCompanyName(companyID)
     if (not findFirstValidCompany()):
