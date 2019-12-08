@@ -1,6 +1,9 @@
 import os
+import requests
+import urllib3
 import unidecode
 import time
+
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.keys import Keys
@@ -8,9 +11,12 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select
+from selenium.webdriver.chrome.options import Options
 
+apiURL = "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext"
 initialURL = "https://cvmweb.cvm.gov.br/SWB/Sistemas/SCW/CPublica/CiaAb/FormBuscaCiaAb.aspx?TipoConsult=c"
-
+validTypes = ["AGO","AGO/E","AGE"]
+invalidSpecimens = ["manual para participacao","justificacao de incorporacao, fusao ou cisao","protocolo de incorporacao, fusao ou cisao","protocolo e justificativa de incorporacao, fusao ou cisao","protocolo e justificacao de incorporacao, fusao ou cisao","edital de convocacao"]
 dictionary = {
     "ata": "ATA",
     "boletim de voto a distancia":"BVD",
@@ -25,81 +31,70 @@ dictionary = {
     "sumario das decisoes":"SUM"
 }
 
-profile = webdriver.FirefoxProfile()
-profile.set_preference('browser.download.folderList', 2)  # custom location
-profile.set_preference('browser.download.manager.showWhenStarting', False)
-profile.set_preference('browser.helperApps.neverAsk.saveToDisk', 'application/pdf')  
-profile.set_preference('browser.helperApps.neverAsk.saveToDisk', 'application/msword')  
-profile.set_preference('browser.helperApps.neverAsk.saveToDisk', 'text/html')  
-
-profile.set_preference('browser.download.manager.showAlertOnComplete',False)
-
-profile.set_preference('browser.download.dir', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'out'))
-
-firefox = webdriver.Firefox(firefox_profile=profile)
-wait = WebDriverWait(firefox,100)
-
-validTypes = ["AGO","AGO/E","AGE"]
-invalidSpecimens = ["manual para participacao","justificacao de incorporacao, fusao ou cisao","protocolo de incorporacao, fusao ou cisao","protocolo de justificativa de incorporacao, fusao ou cisao","edital de convocacao"]
-
+firefox = webdriver.Firefox()
+wait = WebDriverWait(firefox,50)
 downloadedFiles = []
 
-def TableRowDataToFileName(companyCode,docType,specimenCode,date,status,version,category):
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+def TableRowDataToFileName(companyCode,documentType,specimenCode,date,status,version,category):
     companyCode = ''.join(companyCode.split('-'))
 
-    docType = ''.join(docType.split('/'))
+    documentType = ''.join(documentType.split('/'))
     try:
         specimenCode = dictionary[unidecode.unidecode(specimenCode.lower())]
     except KeyError:
         print ("|"+unidecode.unidecode(specimenCode.lower())+"|")
         specimenCode = "ERROR"
 
-    dateArr = date.split()
-    dateArr[0] = dateArr[0].split('/')[::-1]
+    dateArray = date.split()
+    dateArray[0] = dateArray[0].split('/')[::-1]
 
-    if (len(dateArr[0][0]) is 2):
-        dateArr[0][0] = "20" + dateArr[0][0]
-    if (len(dateArr[0][1]) is 1):
-        dateArr[0][1] = '0' + dateArr[0][1]
-    if (len(dateArr[0][2]) is 1):
-        dateArr[0][2] = '0' + dateArr[0][2]
+    if (len(dateArray[0][0]) is 2):
+        dateArray[0][0] = "20" + dateArray[0][0]
+    if (len(dateArray[0][1]) is 1):
+        dateArray[0][1] = '0' + dateArray[0][1]
+    if (len(dateArray[0][2]) is 1):
+        dateArray[0][2] = '0' + dateArray[0][2]
 
-    dateArr[0] = ''.join(dateArr[0])
-    print(dateArr[0])
-    dateArr[1] = ''.join(dateArr[1].split(':'))
-    date = ''.join(dateArr)
+    dateArray[0] = ''.join(dateArray[0])
+    dateArray[1] = ''.join(dateArray[1].split(':'))
+    date = ''.join(dateArray)
 
     status = status[0]
 
-    finalIterable = (companyCode,docType,specimenCode,date,status,version,category)
+    finalIterable = (companyCode,documentType,specimenCode,date,status,version,category)
 
     return '_'.join(finalIterable)
+
 def queryCVM():
 
     # Parte onde temos o formulario para a empresa escolhida
     wait.until(EC.invisibility_of_element_located((By.ID,"divLoading")))
-    wait.until(EC.presence_of_element_located((By.ID, "rdPeriodo")))
+    # wait.until(EC.presence_of_element_located((By.ID, "rdPeriodo")))
     wait.until(EC.invisibility_of_element_located((By.ID,"divSplash")))
 
     periodRadio = firefox.find_element_by_id("rdPeriodo")
     periodRadio.click()
 
+    wait.until(EC.visibility_of_element_located((By.ID, "txtDataIni")))
+
     txtDataIni = firefox.find_element_by_id("txtDataIni")
     txtDataIni.send_keys("05/01/2017")
     txtHoraIni = firefox.find_element_by_id("txtHoraIni")
     txtHoraIni.send_keys("00:00")
-    txtDataFim = firefox.find_element_by_id("txtDataFim")
-    txtDataFim.send_keys("05/01/2019")
-    txtHoraFim = firefox.find_element_by_id("txtHoraFim")
-    txtHoraFim.send_keys("23:59")
 
     cboCategoria = firefox.find_elements_by_tag_name("select")[0]
-    Select(cboCategoria).select_by_visible_text("Assembleia")
+    try:
+        Select(cboCategoria).select_by_visible_text("Assembleia")
+    except NoSuchElementException:
+        return 0
 
     wait.until(EC.invisibility_of_element_located((By.ID,"divSplash")))
     btnConsulta = firefox.find_element_by_id("btnConsulta")
     btnConsulta.click()
     wait.until(EC.invisibility_of_element_located((By.ID,"divSplash")))
+    return 1
 
 def fillCompanyName(companyID):
 
@@ -117,6 +112,8 @@ def findFirstValidCompany():
                 return 0
     except NoSuchElementException:
         print("Regular")
+    except StaleElementReferenceException:
+        print('Regular')
     wait.until(EC.presence_of_element_located((By.ID, "dlCiasCdCVM")))
     # Parte onde temos a tabela de empresas possíveis
     tableRows = firefox.find_elements_by_tag_name("tr")
@@ -134,71 +131,76 @@ def findFirstValidCompany():
 def DownloadFilesFromResultTable():
     paginationText = firefox.find_element_by_id("grdDocumentos_info")
     text = paginationText.text.split()
-    numString = text[len(text) - 2]
-    print("Max de arquivos: " + numString)
-    num = int( int(numString) / 100 ) + 1
-    print ("Fora do Loop de range")
-    for i in range(0,num):
-        print("Dentro do Loop de Range, Fora do de rows")
-        wait.until(EC.presence_of_element_located((By.TAG_NAME,"td")))
+    paginationNumberString = text[len(text) - 2]
+    paginationNumber = int( int(paginationNumberString) / 100 ) + 1
+    for i in range(0,paginationNumber):
+        wait.until(EC.visibility_of_element_located((By.CLASS_NAME,"fi-download")))
         resultRows = firefox.find_elements_by_tag_name("tr")
-        print("Rows: " + str(len(resultRows)))
         GetValidDocs(resultRows)
-        print ("Saiu do loop de rows")
         nextButton = firefox.find_element_by_id("grdDocumentos_next")
         if ("disabled" not in nextButton.get_attribute("class")):
             nextButton.click()
-    print("Saiu do loop de range")
+
+def ValidateDocumentCriteria(informationRow):
+    typeValidation = informationRow[3].text in validTypes
+    specimenValidation = unidecode.unidecode(informationRow[4].text.lower()) not in invalidSpecimens
+    active = "Ativo" in informationRow[7].text
+
+    return (typeValidation and specimenValidation and active)
 
 def GetValidDocs(resultRows):
-    oki = 0
-    notOki = 0
+    validCount = 0
+    invalidCount = 0
     for row in resultRows:
-        print("Dentro do loop de rows")
-        print(len(row.find_elements_by_tag_name("td")))
-        if (not len(row.find_elements_by_tag_name("td"))):
+        if (len(row.find_elements_by_tag_name("td")) < 10):
             continue
         rowData = row.find_elements_by_tag_name("td")
-        if (rowData[3].text in validTypes):
-            if (unidecode.unidecode(rowData[4].text.lower()) not in invalidSpecimens):
-                if ("Ativo" in rowData[7].text ):
-                    oki += 1
-                    filename = TableRowDataToFileName(rowData[0].text,rowData[3].text,rowData[4].text,rowData[6].text,rowData[7].text,rowData[8].text,rowData[9].text)
-                    downloadedFiles.append(filename)
-                    fileLink = row.find_element_by_class_name('fi-download')
-                    fileLink.click()
-                    ChangeDownloadFileName(filename)
+        if (ValidateDocumentCriteria(rowData)):
+            validCount += 1
+            filename = TableRowDataToFileName(rowData[0].text,rowData[3].text,rowData[4].text,rowData[6].text,rowData[7].text,rowData[8].text,rowData[9].text)
+            fileLink = row.find_element_by_class_name('fi-download')
+            fileData = fileLink.get_attribute('onclick').rstrip().split(',')
+            if (not DownloadFile(fileData[0],fileData[1],fileData[2],fileData[3],filename)):
+                print("Erro no download do arquivo " + filename)
 
-            else:
-                notOki += 1
         else:
-            notOki += 1
-    print("Válidos: " + str(oki) + " | Inválidos: " + str(notOki))
+            invalidCount += 1
 
+def fileLen(fname):
+    with open(fname) as f:
+        for i, l in enumerate(f):
+            pass
+    return i + 1
+
+def DownloadFile(numSequencia, numVersao, numProtocolo, descTipo, endFileName):
+    url = apiURL + "&numSequencia=" + numSequencia + "&numVersao=" + numVersao + "&numProtocolo=" + numProtocolo + "&descTipo=" + descTipo + "&CodigoInstituicao=1"
+    try:
+        endFile = requests.get( url, allow_redirects=True, verify=False)
+    except requests.ConnectionError:
+        return 0
+    except ConnectionResetError:
+        return 0
+    file = open(endFileName,"wb")
+    file.write(endFile.content)
+    return 1
+    
 def DownloadDocumentsByCompanyName(companyID):
     fillCompanyName(companyID)
     if (not findFirstValidCompany()):
         return 0
-    queryCVM()
+    if (not queryCVM()):
+        return 0
     DownloadFilesFromResultTable()
     return 1
 
-def ChangeDownloadFileName(name):
-    for arq in os.listdir():
-        if (arq not in downloadedFiles):
-            # Encontrei o arquivo que precisa ser mudado
-            while not os.path.exists(arq):
-                time.sleep(1)
-
-            if os.path.isfile(arq):
-                os.rename(arq,name)
-            os.rename(arq,name)
-            break
-
 def main():
-    companyFile = open("updated.csv","r")
-    os.chdir('./Downloads')
+    companyFile = open("actual.csv","r")
+    size = fileLen("./actual.csv")
+    os.chdir('./out')
+    i = 0
     for company in companyFile:
+        i += 1
+        print( str( (i/size)*100 ) + "%")
         print ("CNPJ: "+ company)
         if DownloadDocumentsByCompanyName(company):
             print("Resultados encontrados")
