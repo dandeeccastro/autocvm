@@ -37,6 +37,9 @@ downloadedFiles = []
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# Transforma cada linha válida da tabela no nome de arquivo especificado pela
+# minha contratante
+
 def TableRowDataToFileName(companyCode,documentType,specimenCode,date,status,version,category):
     companyCode = ''.join(companyCode.split('-'))
 
@@ -67,6 +70,9 @@ def TableRowDataToFileName(companyCode,documentType,specimenCode,date,status,ver
 
     return '_'.join(finalIterable)
 
+# Escolhida a empresa, essa função seleciona o periodo em que os documentos devem ser 
+# pesquisados e submete a pesquisa 
+
 def queryCVM():
 
     # Parte onde temos o formulario para a empresa escolhida
@@ -96,6 +102,7 @@ def queryCVM():
     wait.until(EC.invisibility_of_element_located((By.ID,"divSplash")))
     return 1
 
+# Preenche o nome da empresa no campo inicial do script
 def fillCompanyName(companyID):
 
     firefox.get(initialURL)
@@ -103,6 +110,7 @@ def fillCompanyName(companyID):
     inputField.send_keys(companyID)
     inputField.send_keys(Keys.ENTER)
 
+# Dado o resultado de fillCompanyName(), pego o primeiro resultado valido e clico nele
 def findFirstValidCompany():
     wait.until_not(EC.presence_of_element_located((By.ID,"txtCNPJNome")))
     try:
@@ -128,6 +136,7 @@ def findFirstValidCompany():
         return 0
     return 1
 
+# Baixo os arquivos no formato desejado para a pasta out
 def DownloadFilesFromResultTable():
     paginationText = firefox.find_element_by_id("grdDocumentos_info")
     text = paginationText.text.split()
@@ -141,6 +150,7 @@ def DownloadFilesFromResultTable():
         if ("disabled" not in nextButton.get_attribute("class")):
             nextButton.click()
 
+# Função que verifica a validade do documento baseado no critério de escolha da contratante
 def ValidateDocumentCriteria(informationRow):
     typeValidation = informationRow[3].text in validTypes
     specimenValidation = unidecode.unidecode(informationRow[4].text.lower()) not in invalidSpecimens
@@ -148,6 +158,7 @@ def ValidateDocumentCriteria(informationRow):
 
     return (typeValidation and specimenValidation and active)
 
+# Percorre a tabela baixando os arquivos válidos
 def GetValidDocs(resultRows):
     validCount = 0
     invalidCount = 0
@@ -172,6 +183,9 @@ def fileLen(fname):
             pass
     return i + 1
 
+# Pequena abstração. Ao invés de clicar no botão de download, pego os parametros passados pro botão e trato eles para construir minha própria
+# requisição para a API da CVM. Isso me garante mais controle no download e mudança de nome de arquivo, porque posso usar requests.get e 
+# mudar o nome diretamente, ao invés de baixar pelo navegador
 def DownloadFile(numSequencia, numVersao, numProtocolo, descTipo, endFileName):
     url = apiURL + "&numSequencia=" + numSequencia + "&numVersao=" + numVersao + "&numProtocolo=" + numProtocolo + "&descTipo=" + descTipo + "&CodigoInstituicao=1"
     try:
@@ -184,6 +198,7 @@ def DownloadFile(numSequencia, numVersao, numProtocolo, descTipo, endFileName):
     file.write(endFile.content)
     return 1
     
+# Estrutura geral do código
 def DownloadDocumentsByCompanyName(companyID):
     fillCompanyName(companyID)
     if (not findFirstValidCompany()):
